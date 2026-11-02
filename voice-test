@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# VOICE ONLY sweep - no reverb, no echo, no flanger. Dial the voice in first.
+#   ./voice-test in.wav
+set -euo pipefail
+IN="${1:?usage: voice-test in.wav}"
+OUT="${2:-$HOME/cyclops-voice/voice-out}"
+HERE="$HOME/cyclops-voice"
+mkdir -p "$OUT"; rm -f "$OUT"/*.wav "$OUT"/*.mp3
+
+say(){ espeak-ng -v en-us -s 145 -p 25 -a 120 -w "$1" "$2" 2>/dev/null
+       ffmpeg -v error -y -i "$1" -ar 48000 -ac 1 "$1.n.wav"; mv "$1.n.wav" "$1"; }
+i=0; LIST=()
+add(){ local label="$1"; shift; i=$((i+1)); local n=$(printf "%02d" $i)
+  "$HERE/cyclops" "$IN" "$OUT/$n.wav" --preset voice --fl 0 --wet 0 --auto 0 "$@" >/dev/null 2>&1
+  ffmpeg -v error -y -i "$OUT/$n.wav" -ar 48000 -ac 1 -af "loudnorm=I=-18:TP=-2" "$OUT/$n.n.wav"
+  mv "$OUT/$n.n.wav" "$OUT/$n.wav"; say "$OUT/$n.l.wav" "$label"
+  LIST+=("$OUT/$n.l.wav" "$OUT/$n.wav"); echo "  $n  $label"; }
+
+echo "VOICE ONLY - no reverb, no echo, no flanger"
+add "zero. untouched original"          --pitch 0 --form 1.0 --sub 0 --drive 1.0 --deess 0
+add "one. pitch only, three down"       --pitch -3 --form 1.0 --sub 0
+add "two. body only, no pitch change"   --pitch 0  --form 0.85 --sub 0
+add "three. pitch two, body point nine five" --pitch -2 --form 0.95 --sub 0
+add "four. pitch three, body point nine"     --pitch -3 --form 0.90 --sub 0
+add "five. pitch three, big body point eight four" --pitch -3 --form 0.84 --sub 0
+add "six. pitch four, body point eight eight"      --pitch -4 --form 0.88 --sub 0
+add "seven. pitch five, body point eight two"      --pitch -5 --form 0.82 --sub 0
+add "eight. number four plus sub bass"   --pitch -3 --form 0.90 --sub 0.6
+add "nine. number five plus sub bass"    --pitch -3 --form 0.84 --sub 0.7
+add "ten. number seven plus sub bass"    --pitch -5 --form 0.82 --sub 0.7
+
+ffmpeg -v error -y -f lavfi -t 0.5 -i anullsrc=r=48000:cl=mono "$OUT/g.wav"
+A=(); F=""; k=0
+for f in "${LIST[@]}"; do A+=(-i "$f"); F+="[$k]"; k=$((k+1)); A+=(-i "$OUT/g.wav"); F+="[$k]"; k=$((k+1)); done
+ffmpeg -v error -y "${A[@]}" -filter_complex "${F}concat=n=$k:v=0:a=1" -ar 48000 "$OUT/VOICE.wav"
+ffmpeg -v error -y -i "$OUT/VOICE.wav" -ac 1 -b:a 96k "$OUT/VOICE.mp3"
+rm -f "$OUT"/*.l.wav "$OUT/g.wav"
+echo; echo "-> $OUT/VOICE.mp3"

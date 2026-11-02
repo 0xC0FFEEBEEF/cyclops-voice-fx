@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+*.bak
+
+# audio and reference material stay local
+*.wav
+*.mp3
+*.flac
+*.ogg
+*-out/
+demos/
+docs/

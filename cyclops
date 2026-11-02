@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Cyclops voice CLI wrapper. Usage: cyclops in.wav out.wav [--preset cyclops|clean|subtle|monster]
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+exec "$HERE/venv/bin/python" "$HERE/cyclops.py" "$@"

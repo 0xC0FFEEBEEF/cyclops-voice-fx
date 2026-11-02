@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Render a labelled sweep of Cyclops variants into one file you can play straight through.
+#   ./audition in.wav [outdir]
+set -euo pipefail
+IN="${1:?usage: audition in.wav [outdir]}"
+OUT="${2:-$HOME/cyclops-voice/audition-out}"
+HERE="$HOME/cyclops-voice"
+mkdir -p "$OUT"; rm -f "$OUT"/*.wav
+
+say() { espeak-ng -v en-us -s 150 -p 30 -a 130 -w "$1" "$2" 2>/dev/null; \
+        ffmpeg -v error -y -i "$1" -ar 48000 -ac 1 "$1.n.wav"; mv "$1.n.wav" "$1"; }
+
+i=0; LIST=()
+add() { # add <label> <args...>
+  local label="$1"; shift
+  i=$((i+1)); local n=$(printf "%02d" $i)
+  "$HERE/cyclops" "$IN" "$OUT/$n.wav" "$@" >/dev/null 2>&1
+  ffmpeg -v error -y -i "$OUT/$n.wav" -ar 48000 -ac 1 -af "loudnorm=I=-18:TP=-2" "$OUT/$n.n.wav"
+  mv "$OUT/$n.n.wav" "$OUT/$n.wav"
+  say "$OUT/$n.lbl.wav" "$label"
+  LIST+=("$OUT/$n.lbl.wav" "$OUT/$n.wav")
+  echo "  $n  $label"
+}
+
+echo "rendering sweep (this takes ~10s each)…"
+add "one. preset cyclops"                    --preset cyclops
+add "two. clean, no autotune"                --preset clean
+add "three. subtle"                          --preset subtle
+add "four. monster"                          --preset monster
+add "five. more sub bass"                    --preset cyclops --sub 0.8
+add "six. less sub bass"                     --preset cyclops --sub 0.35
+add "seven. heavy autotune"                  --preset cyclops --auto 1.0 --ap 0.95
+add "eight. light autotune"                  --preset cyclops --ap 0.25
+add "nine. minor triad tuning"               --preset cyclops --scale triad_min --ap 0.8
+add "ten. fifths tuning"                     --preset cyclops --scale fifths --ap 0.8
+add "eleven. big reverb"                     --preset cyclops --wet 0.42
+add "twelve. dry, small room"                --preset cyclops --wet 0.15
+add "thirteen. deeper voice"                 --preset cyclops --pitch -3.5
+add "fourteen. heavy flanger"                --preset cyclops --fl 0.6
+add "fifteen. crushed loud"                  --preset cyclops --drive 2.0
+
+# stitch with gaps
+ffmpeg -v error -y -f lavfi -t 0.45 -i anullsrc=r=48000:cl=mono "$OUT/gap.wav"
+ARGS=(); FC=""; k=0
+for f in "${LIST[@]}"; do ARGS+=(-i "$f"); FC+="[$k]"; k=$((k+1));
+  ARGS+=(-i "$OUT/gap.wav"); FC+="[$k]"; k=$((k+1)); done
+ffmpeg -v error -y "${ARGS[@]}" -filter_complex "${FC}concat=n=$k:v=0:a=1" -ar 48000 "$OUT/SWEEP.wav"
+ffmpeg -v error -y -i "$OUT/SWEEP.wav" -b:a 192k "$OUT/SWEEP.mp3"
+rm -f "$OUT"/*.lbl.wav "$OUT/gap.wav"
+echo
+echo "done -> $OUT/SWEEP.mp3   (numbered clips also kept as $OUT/NN.wav)"
+echo "play:  mpv '$OUT/SWEEP.mp3'"
